@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>NetDiag AI</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>🛜 NetDiag AI</h1>
+  <p class="subtitle">Network Troubleshooting Assistant</p>
+</header>
+
+<main>
+  <section class="card">
+    <label for="target">Device IP or FQDN</label>
+    <input id="target" type="text" placeholder="e.g. 8.8.8.8 or example.com" autocomplete="off" autocapitalize="off">
+
+    <div class="checks">
+      <label><input type="checkbox" value="connectivity" checked> Connectivity (Ping)</label>
+      <label><input type="checkbox" value="dns" checked> DNS Resolution</label>
+      <label><input type="checkbox" value="firewall" checked> Firewall / Port Check</label>
+      <label><input type="checkbox" value="traceroute" checked> Traceroute (best-effort)</label>
+      <label><input type="checkbox" value="cloud" checked> Cloud / HTTP(S) Reachability</label>
+    </div>
+
+    <label for="customPorts">Custom ports to check (optional, comma-separated)</label>
+    <input id="customPorts" type="text" placeholder="e.g. 8080, 8443, 9000" autocomplete="off">
+
+    <button id="runBtn">Run Diagnostics</button>
+    <p id="errorMsg" class="error" hidden></p>
+  </section>
+
+  <section id="resultsSection" class="card" hidden>
+    <div class="results-header">
+      <h2>Results for <span id="resultTarget"></span></h2>
+      <button id="exportBtn">Share Report</button>
+    </div>
+    <div id="resultsList"></div>
+
+    <div class="suggestions">
+      <h3>Suggested Next Steps</h3>
+      <ul id="suggestionsList"></ul>
+    </div>
+  </section>
+
+  <div id="spinner" hidden>Running diagnostics…</div>
+</main>
+
+<footer>
+  <p>Runs 100% on-device — no server or network backend required.</p>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>

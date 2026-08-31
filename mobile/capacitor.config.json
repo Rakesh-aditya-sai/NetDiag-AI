@@ -1,0 +1,12 @@
+{
+  "appId": "com.netdiag.ai",
+  "appName": "NetDiag AI",
+  "webDir": "public",
+  "android": {
+    "allowMixedContent": true,
+    "backgroundColor": "#0f172a"
+  },
+  "server": {
+    "androidScheme": "https"
+  }
+}

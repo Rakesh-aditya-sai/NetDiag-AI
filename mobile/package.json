@@ -1,0 +1,16 @@
+{
+  "name": "netdiag-mobile",
+  "version": "1.0.0",
+  "description": "NetDiag AI - standalone Android app, diagnostics run fully on-device",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"no tests\" && exit 0"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@capacitor/android": "^5.7.8",
+    "@capacitor/cli": "^5.7.8",
+    "@capacitor/core": "^5.7.8"
+  }
+}

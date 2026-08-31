@@ -1,0 +1,12 @@
+{
+  "name": "netdiag-ai",
+  "version": "1.0.0",
+  "description": "Network Troubleshooting Assistant - web app for connectivity, DNS, firewall/port, traceroute and cloud reachability diagnostics",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}

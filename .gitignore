@@ -1,6 +1,8 @@
 node_modules/
 builds/
 *.log
+web/data/
+dist/
 
 mobile/android/local.properties
 mobile/android/.gradle/

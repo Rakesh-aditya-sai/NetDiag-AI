@@ -1,12 +1,15 @@
 const express = require('express');
 const path = require('path');
+const fs = require('fs');
 const net = require('net');
 const dgram = require('dgram');
 const dnsSync = require('dns');
 const dns = dnsSync.promises;
 const http = require('http');
 const https = require('https');
+const crypto = require('crypto');
 const { execFile } = require('child_process');
+const { Client: SSHClient } = require('ssh2');
 
 const app = express();
 app.use(express.json());
@@ -14,6 +17,44 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 const PORT = process.env.PORT || 4200;
 const COMMON_PORTS = [80, 443, 22, 3389, 53, 3306];
+
+const DATA_DIR = path.join(process.cwd(), 'data');
+const HISTORY_FILE = path.join(DATA_DIR, 'history.json');
+const MONITORS_FILE = path.join(DATA_DIR, 'monitors.json');
+const ALERTS_FILE = path.join(DATA_DIR, 'alerts.json');
+const MAX_HISTORY = 200;
+const MAX_ALERTS = 200;
+
+function ensureDataDir() {
+  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+}
+
+function readJson(file, fallback) {
+  try {
+    return JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch {
+    return fallback;
+  }
+}
+
+function writeJson(file, data) {
+  ensureDataDir();
+  fs.writeFileSync(file, JSON.stringify(data, null, 2));
+}
+
+function appendHistory(record) {
+  const history = readJson(HISTORY_FILE, []);
+  history.unshift(record);
+  if (history.length > MAX_HISTORY) history.length = MAX_HISTORY;
+  writeJson(HISTORY_FILE, history);
+}
+
+function appendAlert(alert) {
+  const alerts = readJson(ALERTS_FILE, []);
+  alerts.unshift(alert);
+  if (alerts.length > MAX_ALERTS) alerts.length = MAX_ALERTS;
+  writeJson(ALERTS_FILE, alerts);
+}
 
 const IPV4_RE = /^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/;
 const HOSTNAME_RE = /^(?=.{1,253}$)(?!-)[a-zA-Z0-9-]{1,63}(?<!-)(\.(?!-)[a-zA-Z0-9-]{1,63}(?<!-))*$/;
@@ -204,12 +245,82 @@ async function checkCloud(target) {
   return { name: 'Cloud / HTTP(S) Reachability', status: 'FAIL', detail: `HTTPS failed (${httpsResult.error}); HTTP failed (${httpResult.error})` };
 }
 
+function runSshCommand(conn, cmd) {
+  return new Promise((resolve, reject) => {
+    conn.exec(cmd, (err, stream) => {
+      if (err) return reject(err);
+      let out = '';
+      let errOut = '';
+      stream.on('data', (d) => { out += d.toString(); });
+      stream.stderr.on('data', (d) => { errOut += d.toString(); });
+      stream.on('close', () => resolve((out || errOut).trim()));
+      stream.on('error', reject);
+    });
+  });
+}
+
+async function checkSsh(target, sshCreds) {
+  if (!sshCreds || !sshCreds.username || (!sshCreds.password && !sshCreds.privateKey)) {
+    return { name: 'SSH Remote Check', status: 'WARNING', detail: 'SSH check skipped — username and a password or private key are required. Credentials are used only for this one request and are never saved.' };
+  }
+  const port = Number.isInteger(sshCreds.port) ? sshCreds.port : 22;
+
+  return new Promise((resolve) => {
+    const conn = new SSHClient();
+    const timeout = setTimeout(() => {
+      conn.end();
+      resolve({ name: 'SSH Remote Check', status: 'FAIL', detail: `SSH connection to ${target}:${port} timed out.` });
+    }, 8000);
+
+    conn.on('ready', async () => {
+      clearTimeout(timeout);
+      try {
+        const [uptime, mem, disk, iface] = await Promise.all([
+          runSshCommand(conn, 'uptime').catch(e => `(error: ${e.message})`),
+          runSshCommand(conn, 'free -m 2>/dev/null || vm_stat 2>/dev/null').catch(e => `(error: ${e.message})`),
+          runSshCommand(conn, "df -h / 2>/dev/null").catch(e => `(error: ${e.message})`),
+          runSshCommand(conn, "ip -brief addr show 2>/dev/null || ifconfig 2>/dev/null").catch(e => `(error: ${e.message})`),
+        ]);
+        conn.end();
+        const detail = [
+          `Connected as ${sshCreds.username}@${target}:${port}`,
+          `\n--- uptime / load ---\n${uptime}`,
+          `\n--- memory ---\n${mem}`,
+          `\n--- disk (/) ---\n${disk}`,
+          `\n--- interfaces ---\n${iface}`,
+        ].join('\n');
+        resolve({ name: 'SSH Remote Check', status: 'PASS', detail });
+      } catch (e) {
+        conn.end();
+        resolve({ name: 'SSH Remote Check', status: 'WARNING', detail: `Connected but a remote command failed: ${e.message}` });
+      }
+    });
+
+    conn.on('error', (e) => {
+      clearTimeout(timeout);
+      resolve({ name: 'SSH Remote Check', status: 'FAIL', detail: `SSH connection failed: ${e.message}` });
+    });
+
+    const connectOpts = {
+      host: target,
+      port,
+      username: sshCreds.username,
+      readyTimeout: 7000,
+    };
+    if (sshCreds.privateKey) connectOpts.privateKey = sshCreds.privateKey;
+    else connectOpts.password = sshCreds.password;
+
+    conn.connect(connectOpts);
+  });
+}
+
 const CHECKS = {
   connectivity: checkConnectivity,
   dns: checkDns,
   firewall: checkFirewall,
   traceroute: checkTraceroute,
   cloud: checkCloud,
+  ssh: checkSsh,
 };
 
 function analyze(results) {
@@ -245,8 +356,24 @@ function analyze(results) {
   return suggestions;
 }
 
+const DEFAULT_CHECKS = ['connectivity', 'dns', 'firewall', 'traceroute', 'cloud'];
+
+async function runDiagnose({ target, checks, customPorts, sshCreds }) {
+  const selected = Array.isArray(checks) && checks.length > 0
+    ? checks.filter(c => CHECKS[c])
+    : DEFAULT_CHECKS;
+
+  const results = await Promise.all(selected.map(c => {
+    if (c === 'firewall') return checkFirewall(target, customPorts);
+    if (c === 'ssh') return checkSsh(target, sshCreds);
+    return CHECKS[c](target);
+  }));
+  const suggestions = analyze(results);
+  return { target, timestamp: new Date().toISOString(), results, suggestions };
+}
+
 app.post('/api/diagnose', async (req, res) => {
-  const { target, checks, customPorts } = req.body || {};
+  const { target, checks, customPorts, sshCreds } = req.body || {};
 
   if (!isValidTarget(target)) {
     return res.status(400).json({ error: 'Invalid target. Enter a valid IPv4/IPv6 address or FQDN (e.g. 8.8.8.8 or example.com).' });
@@ -254,23 +381,144 @@ app.post('/api/diagnose', async (req, res) => {
 
   const selected = Array.isArray(checks) && checks.length > 0
     ? checks.filter(c => CHECKS[c])
-    : Object.keys(CHECKS);
+    : DEFAULT_CHECKS;
 
   if (selected.length === 0) {
     return res.status(400).json({ error: 'No valid checks selected.' });
   }
 
   try {
-    const results = await Promise.all(selected.map(c =>
-      c === 'firewall' ? checkFirewall(target, customPorts) : CHECKS[c](target)
-    ));
-    const suggestions = analyze(results);
-    res.json({ target, timestamp: new Date().toISOString(), results, suggestions });
+    const report = await runDiagnose({ target, checks, customPorts, sshCreds });
+    appendHistory({
+      id: crypto.randomUUID(),
+      target: report.target,
+      timestamp: report.timestamp,
+      source: 'manual',
+      summary: report.results.map(r => ({ name: r.name, status: r.status })),
+      results: report.results,
+      suggestions: report.suggestions,
+    });
+    res.json(report);
   } catch (e) {
     res.status(500).json({ error: `Diagnostics failed: ${e.message}` });
   }
 });
 
+app.get('/api/history', (req, res) => {
+  const history = readJson(HISTORY_FILE, []);
+  res.json(history.map(h => ({ id: h.id, target: h.target, timestamp: h.timestamp, source: h.source, summary: h.summary })));
+});
+
+app.get('/api/history/:id', (req, res) => {
+  const history = readJson(HISTORY_FILE, []);
+  const record = history.find(h => h.id === req.params.id);
+  if (!record) return res.status(404).json({ error: 'History record not found.' });
+  res.json(record);
+});
+
+app.delete('/api/history', (req, res) => {
+  writeJson(HISTORY_FILE, []);
+  res.json({ ok: true });
+});
+
+// --- Scheduled monitoring ---
+
+app.get('/api/monitors', (req, res) => {
+  res.json(readJson(MONITORS_FILE, []));
+});
+
+app.post('/api/monitors', (req, res) => {
+  const { target, checks, customPorts, intervalMinutes } = req.body || {};
+  if (!isValidTarget(target)) {
+    return res.status(400).json({ error: 'Invalid target.' });
+  }
+  const interval = Number.isFinite(intervalMinutes) && intervalMinutes >= 1 ? intervalMinutes : 15;
+  const monitors = readJson(MONITORS_FILE, []);
+  const monitor = {
+    id: crypto.randomUUID(),
+    target,
+    checks: Array.isArray(checks) && checks.length > 0 ? checks : DEFAULT_CHECKS,
+    customPorts: customPorts || '',
+    intervalMinutes: interval,
+    createdAt: new Date().toISOString(),
+    lastRunAt: null,
+    lastStatus: null,
+  };
+  monitors.push(monitor);
+  writeJson(MONITORS_FILE, monitors);
+  res.json(monitor);
+});
+
+app.delete('/api/monitors/:id', (req, res) => {
+  const monitors = readJson(MONITORS_FILE, []);
+  const next = monitors.filter(m => m.id !== req.params.id);
+  writeJson(MONITORS_FILE, next);
+  res.json({ ok: true });
+});
+
+app.get('/api/alerts', (req, res) => {
+  res.json(readJson(ALERTS_FILE, []));
+});
+
+function overallStatus(results) {
+  if (results.some(r => r.status === 'FAIL')) return 'FAIL';
+  if (results.some(r => r.status === 'WARNING')) return 'WARNING';
+  return 'PASS';
+}
+
+async function runMonitorTick() {
+  const monitors = readJson(MONITORS_FILE, []);
+  if (monitors.length === 0) return;
+  const now = Date.now();
+  let changed = false;
+
+  for (const monitor of monitors) {
+    const dueAt = monitor.lastRunAt ? new Date(monitor.lastRunAt).getTime() + monitor.intervalMinutes * 60000 : 0;
+    if (now < dueAt) continue;
+
+    try {
+      const report = await runDiagnose({ target: monitor.target, checks: monitor.checks, customPorts: monitor.customPorts });
+      const status = overallStatus(report.results);
+
+      appendHistory({
+        id: crypto.randomUUID(),
+        target: report.target,
+        timestamp: report.timestamp,
+        source: `monitor:${monitor.id}`,
+        summary: report.results.map(r => ({ name: r.name, status: r.status })),
+        results: report.results,
+        suggestions: report.suggestions,
+      });
+
+      if (monitor.lastStatus && monitor.lastStatus !== status) {
+        appendAlert({
+          id: crypto.randomUUID(),
+          monitorId: monitor.id,
+          target: monitor.target,
+          timestamp: report.timestamp,
+          previousStatus: monitor.lastStatus,
+          newStatus: status,
+          message: `${monitor.target}: status changed from ${monitor.lastStatus} to ${status}`,
+        });
+      }
+
+      monitor.lastStatus = status;
+      monitor.lastRunAt = report.timestamp;
+      changed = true;
+    } catch (e) {
+      monitor.lastRunAt = new Date().toISOString();
+      monitor.lastStatus = 'FAIL';
+      changed = true;
+    }
+  }
+
+  if (changed) writeJson(MONITORS_FILE, monitors);
+}
+
+setInterval(() => { runMonitorTick().catch(() => {}); }, 60000);
+
 app.listen(PORT, '0.0.0.0', () => {
+  ensureDataDir();
   console.log(`NetDiag AI running at http://0.0.0.0:${PORT}`);
+  runMonitorTick().catch(() => {});
 });

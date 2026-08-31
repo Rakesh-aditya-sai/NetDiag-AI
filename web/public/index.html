@@ -13,39 +13,88 @@
 </header>
 
 <main>
-  <section class="card">
-    <label for="target">Device IP or FQDN</label>
-    <input id="target" type="text" placeholder="e.g. 8.8.8.8 or example.com" autocomplete="off">
+  <nav class="tabs">
+    <button class="tab-btn active" data-tab="diagnose">Diagnose</button>
+    <button class="tab-btn" data-tab="history">History</button>
+    <button class="tab-btn" data-tab="monitors">Monitors</button>
+  </nav>
 
-    <div class="checks">
-      <label><input type="checkbox" value="connectivity" checked> Connectivity (Ping)</label>
-      <label><input type="checkbox" value="dns" checked> DNS Resolution</label>
-      <label><input type="checkbox" value="firewall" checked> Firewall / Port Check</label>
-      <label><input type="checkbox" value="traceroute" checked> Traceroute</label>
-      <label><input type="checkbox" value="cloud" checked> Cloud / HTTP(S) Reachability</label>
-    </div>
+  <section id="tab-diagnose" class="tab-panel">
+    <section class="card">
+      <label for="target">Device IP or FQDN</label>
+      <input id="target" type="text" placeholder="e.g. 8.8.8.8 or example.com" autocomplete="off">
 
-    <label for="customPorts">Custom ports to check (optional, comma-separated)</label>
-    <input id="customPorts" type="text" placeholder="e.g. 8080, 8443, 9000" autocomplete="off">
+      <div class="checks">
+        <label><input type="checkbox" value="connectivity" checked> Connectivity (Ping)</label>
+        <label><input type="checkbox" value="dns" checked> DNS Resolution</label>
+        <label><input type="checkbox" value="firewall" checked> Firewall / Port Check</label>
+        <label><input type="checkbox" value="traceroute" checked> Traceroute</label>
+        <label><input type="checkbox" value="cloud" checked> Cloud / HTTP(S) Reachability</label>
+        <label><input type="checkbox" value="ssh" id="sshCheckbox"> SSH Remote Check</label>
+      </div>
 
-    <button id="runBtn">Run Diagnostics</button>
-    <p id="errorMsg" class="error" hidden></p>
+      <label for="customPorts">Custom ports to check (optional, comma-separated)</label>
+      <input id="customPorts" type="text" placeholder="e.g. 8080, 8443, 9000" autocomplete="off">
+
+      <div id="sshFields" class="ssh-fields" hidden>
+        <label for="sshUsername">SSH username</label>
+        <input id="sshUsername" type="text" placeholder="e.g. admin" autocomplete="off">
+        <label for="sshPassword">SSH password (used once, never saved)</label>
+        <input id="sshPassword" type="password" placeholder="password" autocomplete="off">
+        <label for="sshPort">SSH port (default 22)</label>
+        <input id="sshPort" type="text" placeholder="22" autocomplete="off">
+      </div>
+
+      <button id="runBtn">Run Diagnostics</button>
+      <p id="errorMsg" class="error" hidden></p>
+    </section>
+
+    <section id="resultsSection" class="card" hidden>
+      <div class="results-header">
+        <h2>Results for <span id="resultTarget"></span></h2>
+        <button id="exportBtn">Download Report</button>
+      </div>
+      <div id="resultsList"></div>
+
+      <div class="suggestions">
+        <h3>Suggested Next Steps</h3>
+        <ul id="suggestionsList"></ul>
+      </div>
+    </section>
+
+    <div id="spinner" hidden>Running diagnostics…</div>
   </section>
 
-  <section id="resultsSection" class="card" hidden>
-    <div class="results-header">
-      <h2>Results for <span id="resultTarget"></span></h2>
-      <button id="exportBtn">Download Report</button>
-    </div>
-    <div id="resultsList"></div>
-
-    <div class="suggestions">
-      <h3>Suggested Next Steps</h3>
-      <ul id="suggestionsList"></ul>
-    </div>
+  <section id="tab-history" class="tab-panel" hidden>
+    <section class="card">
+      <div class="results-header">
+        <h2>Past Runs</h2>
+        <button id="clearHistoryBtn">Clear History</button>
+      </div>
+      <div id="historyList"></div>
+    </section>
   </section>
 
-  <div id="spinner" hidden>Running diagnostics…</div>
+  <section id="tab-monitors" class="tab-panel" hidden>
+    <section class="card">
+      <label for="monitorTarget">Target to monitor</label>
+      <input id="monitorTarget" type="text" placeholder="e.g. 8.8.8.8 or example.com" autocomplete="off">
+      <label for="monitorInterval">Check every (minutes)</label>
+      <input id="monitorInterval" type="text" placeholder="15" autocomplete="off">
+      <button id="addMonitorBtn">Add Monitor</button>
+      <p id="monitorErrorMsg" class="error" hidden></p>
+    </section>
+
+    <section class="card">
+      <h2>Active Monitors</h2>
+      <div id="monitorsList"></div>
+    </section>
+
+    <section class="card">
+      <h2>Alerts</h2>
+      <div id="alertsList"></div>
+    </section>
+  </section>
 </main>
 
 <footer>

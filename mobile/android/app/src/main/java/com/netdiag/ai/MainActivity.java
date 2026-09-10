@@ -8,6 +8,5 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(NetDiagPlugin.class);
         super.onCreate(savedInstanceState);
-        NotificationHelper.ensureChannel(this);
     }
 }

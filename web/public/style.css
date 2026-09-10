@@ -75,6 +75,10 @@ main {
   gap: 1.25rem;
 }
 
+.tab-panel[hidden] {
+  display: none;
+}
+
 .ssh-fields {
   border-top: 1px solid var(--border);
   padding-top: 1rem;

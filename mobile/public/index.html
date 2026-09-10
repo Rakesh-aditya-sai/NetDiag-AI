@@ -13,45 +13,196 @@
 </header>
 
 <main>
-  <section class="card">
-    <label for="target">Device IP or FQDN</label>
-    <input id="target" type="text" placeholder="e.g. 8.8.8.8 or example.com" autocomplete="off" autocapitalize="off">
+  <nav class="tabs">
+    <button class="tab-btn active" data-tab="diagnose">Diagnose</button>
+    <button class="tab-btn" data-tab="history">History</button>
+    <button class="tab-btn" data-tab="dashboard">Dashboard</button>
+    <button class="tab-btn" data-tab="monitor">Monitor</button>
+    <button class="tab-btn" data-tab="traffic">Traffic</button>
+    <button class="tab-btn" data-tab="terminal">Terminal</button>
+  </nav>
 
-    <div class="checks">
-      <label><input type="checkbox" value="connectivity" checked> Connectivity (Ping)</label>
-      <label><input type="checkbox" value="dns" checked> DNS Resolution</label>
-      <label><input type="checkbox" value="firewall" checked> Firewall / Port Check</label>
-      <label><input type="checkbox" value="traceroute" checked> Traceroute (best-effort)</label>
-      <label><input type="checkbox" value="cloud" checked> Cloud / HTTP(S) Reachability</label>
-    </div>
+  <section id="tab-diagnose" class="tab-panel">
+    <section class="card">
+      <label for="target">Device IP or FQDN</label>
+      <input id="target" type="text" placeholder="e.g. 8.8.8.8 or example.com" autocomplete="off" autocapitalize="off">
 
-    <label for="customPorts">Custom ports to check (optional, comma-separated)</label>
-    <input id="customPorts" type="text" placeholder="e.g. 8080, 8443, 9000" autocomplete="off">
+      <div class="checks">
+        <label><input type="checkbox" value="connectivity" checked> Connectivity (Ping)</label>
+        <label><input type="checkbox" value="dns" checked> DNS Resolution</label>
+        <label><input type="checkbox" value="firewall" checked> Firewall / Port Check</label>
+        <label><input type="checkbox" value="traceroute" checked> Traceroute (best-effort)</label>
+        <label><input type="checkbox" value="cloud" checked> Cloud / HTTP(S) Reachability</label>
+        <label><input type="checkbox" value="ssl"> SSL/TLS Certificate Info</label>
+      </div>
 
-    <button id="runBtn">Run Diagnostics</button>
-    <p id="errorMsg" class="error" hidden></p>
+      <label for="customPorts">Custom ports to check (optional, comma-separated)</label>
+      <input id="customPorts" type="text" placeholder="e.g. 8080, 8443, 9000" autocomplete="off">
+
+      <button id="runBtn">Run Diagnostics</button>
+      <p id="errorMsg" class="error" hidden></p>
+    </section>
+
+    <section id="resultsSection" class="card" hidden>
+      <div class="results-header">
+        <h2>Results for <span id="resultTarget"></span></h2>
+        <button id="exportBtn">Share Report</button>
+        <button id="downloadPdfBtn">Download PDF</button>
+      </div>
+      <div id="environmentBox" class="env-box" hidden></div>
+      <div id="resultsList"></div>
+
+      <div class="suggestions">
+        <h3>Suggested Next Steps</h3>
+        <ul id="suggestionsList"></ul>
+      </div>
+    </section>
+
+    <div id="spinner" hidden>Running diagnostics…</div>
   </section>
 
-  <section id="resultsSection" class="card" hidden>
-    <div class="results-header">
-      <h2>Results for <span id="resultTarget"></span></h2>
-      <button id="exportBtn">Share Report</button>
-    </div>
-    <div id="resultsList"></div>
-
-    <div class="suggestions">
-      <h3>Suggested Next Steps</h3>
-      <ul id="suggestionsList"></ul>
-    </div>
+  <section id="tab-history" class="tab-panel" hidden>
+    <section class="card">
+      <div class="results-header">
+        <h2>Past Runs</h2>
+        <button id="exportCsvBtn">Export CSV</button>
+        <button id="clearHistoryBtn">Clear History</button>
+      </div>
+      <div id="historyList"></div>
+    </section>
   </section>
 
-  <div id="spinner" hidden>Running diagnostics…</div>
+  <section id="tab-dashboard" class="tab-panel" hidden>
+    <section class="card">
+      <div class="range-row" id="dashboardRangeRow">
+        <button class="range-btn" data-range="15m">15 Minutes</button>
+        <button class="range-btn" data-range="1h">1 Hour</button>
+        <button class="range-btn" data-range="6h">6 Hours</button>
+        <button class="range-btn" data-range="12h">12 Hours</button>
+        <button class="range-btn" data-range="24h">24 Hours</button>
+        <button class="range-btn active" data-range="7d">7 Days</button>
+        <button class="range-btn" data-range="30d">30 Days</button>
+        <button class="range-btn" data-range="all">All Time</button>
+      </div>
+      <h2 id="dashboardRangeLabel">Last 7 Days</h2>
+      <div class="stat-grid" id="statGrid"></div>
+    </section>
+    <section class="card">
+      <h3>Latency Trend</h3>
+      <div class="chart-wrap"><canvas id="latencyChart"></canvas></div>
+    </section>
+    <section class="card">
+      <h3>Packet Loss Trend</h3>
+      <div class="chart-wrap"><canvas id="lossChart"></canvas></div>
+    </section>
+    <section class="card">
+      <h3>Insights</h3>
+      <ul id="insightsList"></ul>
+    </section>
+  </section>
+
+  <section id="tab-monitor" class="tab-panel" hidden>
+    <section class="card">
+      <label class="switch-row">
+        <span>
+          <strong>Background Monitoring</strong>
+          <div class="meta">Checks watched targets automatically (approx. every 15 minutes) and notifies you when a threshold is crossed. Runs entirely on-device.</div>
+        </span>
+        <input type="checkbox" id="monitoringToggle">
+      </label>
+      <p id="monitorError" class="error" hidden></p>
+    </section>
+
+    <section class="card">
+      <h3>Add a Watched Target</h3>
+      <label for="watchTarget">Target (IP or FQDN)</label>
+      <input id="watchTarget" type="text" placeholder="e.g. 8.8.8.8 or example.com" autocomplete="off" autocapitalize="off">
+      <label for="watchLatency">Latency alert threshold (ms)</label>
+      <input id="watchLatency" type="number" value="300" min="1">
+      <label for="watchLoss">Packet loss alert threshold (%)</label>
+      <input id="watchLoss" type="number" value="20" min="0" max="100">
+      <button id="addWatchBtn">Add Target</button>
+    </section>
+
+    <section class="card">
+      <h3>Watched Targets</h3>
+      <div id="watchList"></div>
+    </section>
+  </section>
+
+  <section id="tab-traffic" class="tab-panel" hidden>
+    <section class="card">
+      <h2>Live Throughput</h2>
+      <div class="stat-grid">
+        <div class="stat-tile">
+          <div class="stat-value" id="liveDownSpeed">—</div>
+          <div class="stat-label">↓ Download</div>
+        </div>
+        <div class="stat-tile">
+          <div class="stat-value" id="liveUpSpeed">—</div>
+          <div class="stat-label">↑ Upload</div>
+        </div>
+      </div>
+      <p class="meta" style="margin-top:0.75rem;">Live speed only updates while this tab is open.</p>
+    </section>
+
+    <section class="card">
+      <h2>Total Data Used Since Device Boot</h2>
+      <div class="stat-grid">
+        <div class="stat-tile">
+          <div class="stat-value" id="bootRx">—</div>
+          <div class="stat-label">Total Received</div>
+        </div>
+        <div class="stat-tile">
+          <div class="stat-value" id="bootTx">—</div>
+          <div class="stat-label">Total Sent</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Data Usage by Period</h2>
+      <p class="meta">Sourced from Android's own persistent usage tracking — covers traffic generated the whole time, even while NetDiag AI wasn't running.</p>
+      <div class="range-row" id="trafficRangeRow">
+        <button class="range-btn active" data-range="today">Today</button>
+        <button class="range-btn" data-range="7d">7 Days</button>
+        <button class="range-btn" data-range="30d">30 Days</button>
+      </div>
+      <div id="usageAccessGate" hidden>
+        <p class="error" style="color:var(--muted);">NetDiag AI needs the "Usage Access" permission to read per-app data usage. This is a special Android permission granted from Settings, not a normal popup.</p>
+        <button id="grantUsageAccessBtn">Grant Usage Access</button>
+      </div>
+      <div class="stat-grid" id="usageTotalsGrid"></div>
+    </section>
+
+    <section class="card">
+      <h3>Per-App Usage (Wi-Fi + Mobile, best-effort)</h3>
+      <div id="appUsageList"></div>
+    </section>
+  </section>
+
+  <section id="tab-terminal" class="tab-panel" hidden>
+    <section class="card terminal-card">
+      <div class="results-header">
+        <h2>Terminal</h2>
+        <button id="clearTerminalBtn">Clear</button>
+      </div>
+      <p class="meta">A sandboxed subset of network/troubleshooting commands (not a root shell). Type <code>help</code> to see what's available.</p>
+      <div id="terminalOutput" class="terminal-output"></div>
+      <div class="terminal-input-row">
+        <span class="terminal-prompt">$</span>
+        <input id="terminalInput" type="text" class="terminal-input" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="type a command, e.g. ping 8.8.8.8">
+      </div>
+    </section>
+  </section>
 </main>
 
 <footer>
   <p>Runs 100% on-device — no server or network backend required.</p>
 </footer>
 
+<script src="vendor/chart.min.js"></script>
+<script src="vendor/jspdf.umd.min.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

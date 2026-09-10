@@ -92,9 +92,10 @@ class TrafficStatsHelper {
                 totalRx += u.rx;
                 totalTx += u.tx;
                 if (u.rx + u.tx <= 0) continue;
+                String label = appLabelForUid(pm, uid);
+                if (label == null) continue; // can't resolve a real app name — skip rather than show a raw uid
                 JSONObject app = new JSONObject();
-                app.put("uid", uid);
-                app.put("label", appLabelForUid(pm, uid));
+                app.put("label", label);
                 app.put("rxBytes", u.rx);
                 app.put("txBytes", u.tx);
                 apps.put(app);
@@ -125,6 +126,6 @@ class TrafficStatsHelper {
             }
         } catch (Exception ignored) {}
         if (uid == Process.SYSTEM_UID) return "Android System";
-        return "uid " + uid;
+        return null;
     }
 }
